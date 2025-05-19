@@ -90,7 +90,14 @@ const HomeViewPage: NextPage = () => {
   const formatChartData = (historyData: Record<string, EntityHistoryPoint[]>): FormattedChartDataPoint[] => {
     const allTimestamps = new Set<number>();
     Object.values(historyData).forEach(entityHistoryList => {
-      entityHistoryList.forEach(point => allTimestamps.add(point.lu * 1000)); // HA lu is in seconds
+      if (Array.isArray(entityHistoryList)) {
+        entityHistoryList.forEach(point => {
+          // Ensure point and point.lu are valid before processing
+          if (point && typeof point.lu === 'number' && !isNaN(point.lu)) {
+            allTimestamps.add(point.lu * 1000); // HA lu is in seconds, convert to ms
+          }
+        });
+      }
     });
 
     const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
@@ -289,3 +296,4 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+
