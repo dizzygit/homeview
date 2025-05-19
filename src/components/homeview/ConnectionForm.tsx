@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { FC } from 'react';
@@ -12,11 +13,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Plug } from 'lucide-react';
 
 const formSchema = z.object({
-  apiUrl: z.string().url({ message: "Please enter a valid URL." }),
-  token: z.string().min(1, { message: "Token cannot be empty." }),
+  homeAssistantUrl: z.string().url({ message: "Please enter a valid URL for your Home Assistant instance." }),
+  username: z.string().min(1, { message: "Username cannot be empty." }),
+  password: z.string().min(1, { message: "Password cannot be empty." }),
 });
 
-type ConnectionFormValues = z.infer<typeof formSchema>;
+export type ConnectionFormValues = z.infer<typeof formSchema>;
 
 interface ConnectionFormProps {
   onConnect: (values: ConnectionFormValues) => void;
@@ -27,8 +29,9 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
   const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      apiUrl: "",
-      token: "",
+      homeAssistantUrl: "",
+      username: "",
+      password: "",
     },
   });
 
@@ -40,7 +43,7 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
           Connect to Home Assistant
         </CardTitle>
         <CardDescription>
-          Enter your Home Assistant instance URL and Long-Lived Access Token.
+          Enter your Home Assistant instance URL, Username, and Password.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -48,10 +51,10 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
           <form onSubmit={form.handleSubmit(onConnect)} className="space-y-6">
             <FormField
               control={form.control}
-              name="apiUrl"
+              name="homeAssistantUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>API URL</FormLabel>
+                  <FormLabel>Home Assistant URL</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., http://homeassistant.local:8123" {...field} />
                   </FormControl>
@@ -61,12 +64,25 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
             />
             <FormField
               control={form.control}
-              name="token"
+              name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Access Token</FormLabel>
+                  <FormLabel>Username</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder="Enter your token" {...field} />
+                    <Input placeholder="Enter your username" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
+                    <Input type="password" placeholder="Enter your password" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

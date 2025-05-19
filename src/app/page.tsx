@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
@@ -5,6 +6,7 @@ import type { NextPage } from 'next';
 import { HomeIcon, LogOut, Loader2 } from 'lucide-react';
 
 import ConnectionForm from '@/components/homeview/ConnectionForm';
+import type { ConnectionFormValues } from '@/components/homeview/ConnectionForm';
 import EntityList from '@/components/homeview/EntityList';
 import DynamicChart from '@/components/homeview/DynamicChart';
 import { Button } from '@/components/ui/button';
@@ -14,8 +16,9 @@ import type { Entity, FormattedChartDataPoint, EntityHistoryPoint } from '@/type
 // Mock API functions
 const MOCK_API_DELAY = 1000;
 
-const mockFetchEntities = async (apiUrl: string, token: string): Promise<Entity[]> => {
-  console.log('Mock fetching entities from:', apiUrl, 'with token:', token);
+// Updated mock function signatures
+const mockFetchEntities = async (homeAssistantUrl: string, username?: string, password?: string): Promise<Entity[]> => {
+  console.log('Mock fetching entities from:', homeAssistantUrl, 'with user:', username);
   await new Promise(resolve => setTimeout(resolve, MOCK_API_DELAY));
   // Simulate API error
   // if (Math.random() < 0.2) throw new Error("Failed to fetch entities (simulated)");
@@ -29,10 +32,10 @@ const mockFetchEntities = async (apiUrl: string, token: string): Promise<Entity[
   ];
 };
 
-const mockFetchEntityHistory = async (entityId: string, apiUrl: string, token: string): Promise<EntityHistoryPoint[]> => {
-  console.log(`Mock fetching history for ${entityId}`);
+const mockFetchEntityHistory = async (entityId: string, homeAssistantUrl: string, username?: string, password?: string): Promise<EntityHistoryPoint[]> => {
+  console.log(`Mock fetching history for ${entityId} from ${homeAssistantUrl} with user: ${username}`);
   await new Promise(resolve => setTimeout(resolve, MOCK_API_DELAY / 2));
-  // if (Math.random() < 0.1) throw new Error(`Failed to fetch history for ${entityId} (simulated)`);
+  // if (Math.random() < 0.1) throw new Error(\`Failed to fetch history for \${entityId} (simulated)\`);
   
   const now = Date.now();
   const history: EntityHistoryPoint[] = [];
@@ -51,8 +54,12 @@ const mockFetchEntityHistory = async (entityId: string, apiUrl: string, token: s
 
 const HomeViewPage: NextPage = () => {
   const [isConnected, setIsConnected] = useState(false);
-  const [apiUrl, setApiUrl] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [homeAssistantUrl, setHomeAssistantUrl] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+  // Password should generally not be stored in state directly in a real app,
+  // but for this mock setup, we might need it for subsequent mock calls.
+  // In a real app, a session/token would be established.
+  const [password, setPassword] = useState<string | null>(null); 
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
@@ -60,14 +67,15 @@ const HomeViewPage: NextPage = () => {
 
   const { toast } = useToast();
 
-  const handleConnect = async (values: { apiUrl: string; token: string }) => {
+  const handleConnect = async (values: ConnectionFormValues) => {
     setLoading(prev => ({ ...prev, connect: true, entities: true }));
     try {
-      // In a real app, you would validate the connection here
+      // In a real app, you would authenticate here and get a session token
       // For now, we just store credentials and fetch entities
-      const fetchedEntities = await mockFetchEntities(values.apiUrl, values.token);
-      setApiUrl(values.apiUrl);
-      setToken(values.token);
+      const fetchedEntities = await mockFetchEntities(values.homeAssistantUrl, values.username, values.password);
+      setHomeAssistantUrl(values.homeAssistantUrl);
+      setUsername(values.username);
+      setPassword(values.password); // Storing for mock purposes
       setEntities(fetchedEntities);
       setIsConnected(true);
       toast({ title: "Successfully Connected", description: "Fetched entities from Home Assistant." });
@@ -81,8 +89,9 @@ const HomeViewPage: NextPage = () => {
 
   const handleDisconnect = () => {
     setIsConnected(false);
-    setApiUrl(null);
-    setToken(null);
+    setHomeAssistantUrl(null);
+    setUsername(null);
+    setPassword(null);
     setEntities([]);
     setSelectedEntityIds([]);
     setChartData([]);
@@ -110,28 +119,25 @@ const HomeViewPage: NextPage = () => {
       selectedEntityIds.forEach(id => {
         const entityHistory = historyData[id];
         if (entityHistory) {
-          // Find the closest point in time or interpolate
-          // For simplicity, using the exact match or last known if not available at this specific combined timestamp
           const point = entityHistory.find(p => p.lu * 1000 === timestamp);
-          dataPoint[id] = point ? Number(point.s) : NaN; // Use NaN for missing data at this specific timestamp
+          dataPoint[id] = point ? Number(point.s) : NaN; 
         }
       });
       return dataPoint;
     }).filter(dp => 
-        // Ensure at least one selected entity has data for this point
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(Number(dp[id])))
     );
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !apiUrl || !token) {
+    if (selectedEntityIds.length === 0 || !homeAssistantUrl ) { // Removed token, username/password check for simplicity here as mock doesn't strictly need them after initial connect for this part
       setChartData([]);
       return;
     }
 
     setLoading(prev => ({ ...prev, chart: true }));
     try {
-      const historyPromises = selectedEntityIds.map(id => mockFetchEntityHistory(id, apiUrl, token));
+      const historyPromises = selectedEntityIds.map(id => mockFetchEntityHistory(id, homeAssistantUrl, username ?? undefined, password ?? undefined));
       const historiesArray = await Promise.all(historyPromises);
       
       const historiesMap: Record<string, EntityHistoryPoint[]> = {};
@@ -148,7 +154,7 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, apiUrl, token, toast]);
+  }, [selectedEntityIds, homeAssistantUrl, username, password, toast]);
 
 
   useEffect(() => {
@@ -161,7 +167,7 @@ const HomeViewPage: NextPage = () => {
 
     const interval = setInterval(() => {
       setChartData(prevData => {
-        if (prevData.length === 0) return prevData; // Don't update if no initial data
+        if (prevData.length === 0) return prevData; 
 
         const newDataPoint: FormattedChartDataPoint = {
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -169,18 +175,17 @@ const HomeViewPage: NextPage = () => {
         
         selectedEntityIds.forEach(id => {
           const lastValue = prevData.length > 0 ? Number(prevData[prevData.length - 1][id]) : (Math.random() * 100);
-          // Simulate slight change
-          const change = (Math.random() - 0.5) * (lastValue * 0.05); // up to 5% change
+          const change = (Math.random() - 0.5) * (lastValue * 0.05); 
           let newValue = lastValue + change;
-          if (id.includes('humidity')) newValue = Math.max(0, Math.min(100, newValue)); // Clamp humidity
+          if (id.includes('humidity')) newValue = Math.max(0, Math.min(100, newValue)); 
           
           newDataPoint[id] = parseFloat(newValue.toFixed(1));
         });
 
         const updatedData = [...prevData, newDataPoint];
-        return updatedData.slice(-60); // Keep last 60 points
+        return updatedData.slice(-60); 
       });
-    }, 5000); // Update every 5 seconds
+    }, 5000); 
 
     return () => clearInterval(interval);
   }, [isConnected, selectedEntityIds, loading.chart]);
@@ -234,3 +239,4 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+
