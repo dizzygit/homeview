@@ -25,10 +25,16 @@ const HomeViewPage: NextPage = () => {
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
   const [loading, setLoading] = useState({ connect: false, entities: false, chart: false });
   
-  const [startDate, setStartDate] = useState<Date | undefined>(subHours(new Date(), 24));
-  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Initialize dates on the client side to avoid hydration mismatch
+    setStartDate(subHours(new Date(), 24));
+    setEndDate(new Date());
+  }, []);
 
   const handleConnect = async (values: ConnectionFormValues) => {
     setLoading(prev => ({ ...prev, connect: true, entities: true }));
@@ -69,6 +75,7 @@ const HomeViewPage: NextPage = () => {
     setEntities([]);
     setSelectedEntityIds([]);
     setChartData([]);
+    // Reset dates to initial client-side defaults
     setStartDate(subHours(new Date(), 24));
     setEndDate(new Date());
     toast({ title: "Disconnected", description: "You have been disconnected from Home Assistant." });
@@ -176,19 +183,25 @@ const HomeViewPage: NextPage = () => {
   }, [selectedEntityIds, homeAssistantUrl, token, startDate, endDate, toast]);
 
   useEffect(() => {
-    fetchChartData();
-  }, [fetchChartData]);
+    // Only fetch if startDate and endDate are initialized
+    if (startDate && endDate) {
+      fetchChartData();
+    }
+  }, [fetchChartData, startDate, endDate]); // Add startDate and endDate as dependencies
 
-  // Real-time data fetching for chart updates (if desired, or remove if manual refresh via date pickers is enough)
+  // Real-time data fetching logic (periodic refresh)
   useEffect(() => {
-    if (!isConnected || selectedEntityIds.length === 0 || loading.chart) return;
+    if (!isConnected || selectedEntityIds.length === 0 || loading.chart || !startDate || !endDate) return;
 
     const interval = setInterval(() => {
-      fetchChartData();
-    }, 60000); // Fetch every 60 seconds, adjust as needed
+      // Ensure dates are set before fetching
+      if (startDate && endDate) {
+         fetchChartData();
+      }
+    }, 60000); // Fetch every 60 seconds
 
     return () => clearInterval(interval);
-  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData]);
+  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]); // Add startDate and endDate
   
   const chartConfig: AppChartConfig = entities
     .filter(e => selectedEntityIds.includes(e.entity_id))
@@ -235,9 +248,15 @@ const HomeViewPage: NextPage = () => {
             </div>
             <div className="lg:col-span-5 space-y-6">
               <div className="flex flex-col sm:flex-row gap-4 items-center p-4 border rounded-lg bg-card shadow">
-                <DatePicker date={startDate} setDate={setStartDate} placeholder="Start Date & Time" disabled={loading.chart} className="w-full sm:w-auto"/>
-                <DatePicker date={endDate} setDate={setEndDate} placeholder="End Date & Time" disabled={loading.chart} className="w-full sm:w-auto"/>
-                <Button onClick={fetchChartData} disabled={loading.chart || selectedEntityIds.length === 0} className="w-full sm:w-auto">
+                <DatePicker date={startDate} setDate={setStartDate} placeholder="Start Date & Time" disabled={loading.chart || !startDate} className="w-full sm:w-auto"/>
+                <DatePicker date={endDate} setDate={setEndDate} placeholder="End Date & Time" disabled={loading.chart || !endDate} className="w-full sm:w-auto"/>
+                <Button 
+                  onClick={() => {
+                    if (startDate && endDate) fetchChartData();
+                  }} 
+                  disabled={loading.chart || selectedEntityIds.length === 0 || !startDate || !endDate} 
+                  className="w-full sm:w-auto"
+                >
                   {loading.chart ? "Refreshing..." : "Refresh Data"}
                 </Button>
               </div>
@@ -268,3 +287,4 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+
