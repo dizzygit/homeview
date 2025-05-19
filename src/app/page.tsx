@@ -10,8 +10,8 @@ import ConnectionForm from '@/components/homeview/ConnectionForm';
 import type { ConnectionFormValues } from '@/components/homeview/ConnectionForm';
 import EntityList from '@/components/homeview/EntityList';
 import DynamicChart from '@/components/homeview/DynamicChart';
-import DataTable from '@/components/homeview/DataTable'; // Import DataTable
-import { DatePicker } from '@/components/ui/date-picker'; // Import DatePicker
+import DataTable from '@/components/homeview/DataTable';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { Entity, FormattedChartDataPoint, EntityHistoryPoint, ChartConfig as AppChartConfig } from '@/types/home-assistant';
@@ -114,8 +114,6 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s);
-            // Use parseFloat for more robust parsing, e.g. "22.5 °C" -> 22.5
-            // Also handles comma decimal separators after replacing.
             numericValue = parseFloat(stateString.replace(',', '.'));
           }
           dataPoint[id] = numericValue;
@@ -126,7 +124,6 @@ const HomeViewPage: NextPage = () => {
       return dataPoint;
     });
 
-    // Filter out rows where ALL selected entities have NaN values for that timestamp
     return formattedPoints.filter(dp => 
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
     );
@@ -209,13 +206,13 @@ const HomeViewPage: NextPage = () => {
     return () => clearInterval(interval);
   }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
   
-  const chartConfig: AppChartConfig = entities
+  const appChartConfig: AppChartConfig = entities
     .filter(e => selectedEntityIds.includes(e.entity_id))
     .reduce((acc, entity, index) => {
-      const chartColors = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+      const chartColorCssVars = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
       acc[entity.entity_id] = {
         label: entity.attributes.friendly_name || entity.entity_id,
-        color: chartColors[index % chartColors.length],
+        color: `hsl(${chartColorCssVars[index % chartColorCssVars.length]})`, // Ensure color is a full HSL string
       };
       return acc;
     }, {} as AppChartConfig);
@@ -269,12 +266,13 @@ const HomeViewPage: NextPage = () => {
               <DynamicChart
                 data={chartData}
                 selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
+                chartConfig={appChartConfig}
                 loading={loading.chart}
               />
               <DataTable
                 data={chartData.map(dp => ({...dp, time: dp.fullTime || dp.time }))} 
                 selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
-                chartConfig={chartConfig}
+                chartConfig={appChartConfig}
                 loading={loading.chart}
               />
             </div>
@@ -293,4 +291,3 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
-
