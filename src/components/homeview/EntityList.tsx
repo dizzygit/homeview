@@ -8,9 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input"; // Added Input
+import { Input } from "@/components/ui/input"; 
 import { getEntityIcon } from '@/lib/home-assistant-icons';
-import { ListTree, SearchIcon } from 'lucide-react'; // Added SearchIcon
+import { ListTree, SearchIcon } from 'lucide-react'; 
 
 interface EntityListProps {
   entities: Entity[];
@@ -24,7 +24,7 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
 
   if (loading) {
     return (
-      <Card className="flex-shrink-0 w-full md:w-1/3 shadow-lg">
+      <Card className="flex-shrink-0 w-full shadow-lg"> {/* Removed md:w-1/3 for full width in its column */}
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <ListTree className="h-6 w-6 text-primary" />
@@ -52,9 +52,9 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
     );
   }
   
-  if (entities.length === 0 && !loading) { // Ensure not to show this during initial load if entities are just empty for a moment
+  if (entities.length === 0 && !loading) { 
     return (
-       <Card className="flex-shrink-0 w-full md:w-1/3 shadow-lg">
+       <Card className="flex-shrink-0 w-full shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <ListTree className="h-6 w-6 text-primary" />
@@ -71,7 +71,7 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
               className="pl-8 w-full h-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              disabled // Still disabled as no entities to search
+              disabled 
             />
           </div>
           <p>No entities found or failed to load entities.</p>
@@ -81,11 +81,21 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
   }
 
   // Filter for entities that are likely to have numerical history (sensors)
+  // and match search term.
+  // We check if entity.state can be parsed to a float.
   const relevantEntities = entities.filter(entity => {
     const domain = entity.entity_id.split('.')[0];
-    const isNumericalSensor = domain === 'sensor' && !isNaN(parseFloat(entity.state));
-    
-    if (!isNumericalSensor) return false;
+    // Check if the current state can be parsed as a number.
+    // parseFloat is more lenient than Number() and can handle units like "10.5 °C" -> 10.5
+    const hasPotentiallyChartableState = !isNaN(parseFloat(String(entity.state).replace(',', '.')));
+
+    if (domain !== 'sensor' && domain !== 'number' && !hasPotentiallyChartableState) {
+        // For simplicity, only consider sensors, numbers, or entities with obviously numeric states.
+        // This could be expanded based on Home Assistant's common numeric entity types.
+        // Or, rely more heavily on device_class if available and consistent.
+        if (!['sensor', 'number'].includes(domain)) return false;
+    }
+
 
     if (searchTerm.trim() === "") return true;
 
@@ -98,7 +108,7 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
 
 
   return (
-    <Card className="flex-shrink-0 w-full md:w-1/3 shadow-lg">
+    <Card className="flex-shrink-0 w-full shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
           <ListTree className="h-6 w-6 text-primary" />

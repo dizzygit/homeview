@@ -92,9 +92,8 @@ const HomeViewPage: NextPage = () => {
     Object.values(historyData).forEach(entityHistoryList => {
       if (Array.isArray(entityHistoryList)) {
         entityHistoryList.forEach(point => {
-          // Ensure point and point.lu are valid before processing
           if (point && typeof point.lu === 'number' && !isNaN(point.lu)) {
-            allTimestamps.add(point.lu * 1000); // HA lu is in seconds, convert to ms
+            allTimestamps.add(point.lu * 1000); 
           }
         });
       }
@@ -104,9 +103,8 @@ const HomeViewPage: NextPage = () => {
     
     const formattedPoints = sortedTimestamps.map(timestamp => {
       const dataPoint: FormattedChartDataPoint = {
-        // Format for chart (HH:mm or HH:mm:ss) and table (full date time)
-        time: format(new Date(timestamp), "HH:mm:ss"), // For chart X-axis
-        fullTime: format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss"), // For table display
+        time: format(new Date(timestamp), "HH:mm:ss"), 
+        fullTime: format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss"), 
       };
       selectedEntityIds.forEach(id => {
         const entityHistory = historyData[id];
@@ -116,8 +114,9 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s);
-            const sanitizedStateString = stateString.replace(',', '.'); // Handle comma decimal separators
-            numericValue = Number(sanitizedStateString);
+            // Use parseFloat for more robust parsing, e.g. "22.5 °C" -> 22.5
+            // Also handles comma decimal separators after replacing.
+            numericValue = parseFloat(stateString.replace(',', '.'));
           }
           dataPoint[id] = numericValue;
         } else {
@@ -127,6 +126,7 @@ const HomeViewPage: NextPage = () => {
       return dataPoint;
     });
 
+    // Filter out rows where ALL selected entities have NaN values for that timestamp
     return formattedPoints.filter(dp => 
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
     );
@@ -190,24 +190,21 @@ const HomeViewPage: NextPage = () => {
   }, [selectedEntityIds, homeAssistantUrl, token, startDate, endDate, toast]);
 
   useEffect(() => {
-    // Only fetch if startDate and endDate are initialized
     if (startDate && endDate && selectedEntityIds.length > 0) {
       fetchChartData();
     } else if (selectedEntityIds.length === 0) {
-      setChartData([]); // Clear chart data if no entities are selected
+      setChartData([]); 
     }
   }, [fetchChartData, startDate, endDate, selectedEntityIds]); 
 
-  // Real-time data fetching logic (periodic refresh)
   useEffect(() => {
     if (!isConnected || selectedEntityIds.length === 0 || loading.chart || !startDate || !endDate) return;
 
     const interval = setInterval(() => {
-      // Ensure dates are set before fetching
       if (startDate && endDate) {
          fetchChartData();
       }
-    }, 60000); // Fetch every 60 seconds
+    }, 60000); 
 
     return () => clearInterval(interval);
   }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
@@ -247,7 +244,7 @@ const HomeViewPage: NextPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
-            <div className="lg:col-span-3"> {/* Adjusted from lg:col-span-2 */}
+            <div className="lg:col-span-3"> 
               <EntityList
                 entities={entities}
                 selectedEntityIds={selectedEntityIds}
@@ -255,7 +252,7 @@ const HomeViewPage: NextPage = () => {
                 loading={loading.entities}
               />
             </div>
-            <div className="lg:col-span-4 space-y-6"> {/* Adjusted from lg:col-span-5 */}
+            <div className="lg:col-span-4 space-y-6"> 
               <div className="flex flex-col sm:flex-row gap-4 items-center p-4 border rounded-lg bg-card shadow">
                 <DatePicker date={startDate} setDate={setStartDate} placeholder="Start Date & Time" disabled={loading.chart || !startDate} className="w-full sm:w-auto"/>
                 <DatePicker date={endDate} setDate={setEndDate} placeholder="End Date & Time" disabled={loading.chart || !endDate} className="w-full sm:w-auto"/>
@@ -275,7 +272,7 @@ const HomeViewPage: NextPage = () => {
                 loading={loading.chart}
               />
               <DataTable
-                data={chartData.map(dp => ({...dp, time: dp.fullTime || dp.time }))} // Use fullTime for table
+                data={chartData.map(dp => ({...dp, time: dp.fullTime || dp.time }))} 
                 selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
                 chartConfig={chartConfig}
                 loading={loading.chart}
