@@ -1,13 +1,16 @@
+
 "use client";
 
 import type { FC } from 'react';
+import { useState } from 'react';
 import type { Entity } from "@/types/home-assistant";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input"; // Added Input
 import { getEntityIcon } from '@/lib/home-assistant-icons';
-import { ListTree } from 'lucide-react';
+import { ListTree, SearchIcon } from 'lucide-react'; // Added SearchIcon
 
 interface EntityListProps {
   entities: Entity[];
@@ -17,6 +20,8 @@ interface EntityListProps {
 }
 
 const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelectionChange, loading }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+
   if (loading) {
     return (
       <Card className="flex-shrink-0 w-full md:w-1/3 shadow-lg">
@@ -29,6 +34,15 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
+            <div className="relative mb-4">
+              <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search entities..."
+                className="pl-8 w-full h-9 bg-muted/50 cursor-not-allowed"
+                disabled
+              />
+            </div>
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center space-x-2 p-2 rounded-md animate-pulse bg-muted/50 h-10" />
             ))}
@@ -38,7 +52,7 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
     );
   }
   
-  if (entities.length === 0) {
+  if (entities.length === 0 && !loading) { // Ensure not to show this during initial load if entities are just empty for a moment
     return (
        <Card className="flex-shrink-0 w-full md:w-1/3 shadow-lg">
         <CardHeader>
@@ -46,8 +60,20 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
             <ListTree className="h-6 w-6 text-primary" />
             Entities
           </CardTitle>
+           <CardDescription>Choose sensors to display on the chart.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="relative mb-4">
+            <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search entities..."
+              className="pl-8 w-full h-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              disabled // Still disabled as no entities to search
+            />
+          </div>
           <p>No entities found or failed to load entities.</p>
         </CardContent>
       </Card>
@@ -57,7 +83,17 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
   // Filter for entities that are likely to have numerical history (sensors)
   const relevantEntities = entities.filter(entity => {
     const domain = entity.entity_id.split('.')[0];
-    return domain === 'sensor' && !isNaN(parseFloat(entity.state));
+    const isNumericalSensor = domain === 'sensor' && !isNaN(parseFloat(entity.state));
+    
+    if (!isNumericalSensor) return false;
+
+    if (searchTerm.trim() === "") return true;
+
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    const friendlyName = entity.attributes.friendly_name?.toLowerCase() || "";
+    const entityId = entity.entity_id.toLowerCase();
+
+    return friendlyName.includes(lowerSearchTerm) || entityId.includes(lowerSearchTerm);
   });
 
 
@@ -68,10 +104,21 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
           <ListTree className="h-6 w-6 text-primary" />
           Select Entities
         </CardTitle>
-        <CardDescription>Choose sensors to display on the chart. Only numerical sensors are shown.</CardDescription>
+        <CardDescription>Choose numerical sensors to display on the chart.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[calc(100vh-20rem)] md:h-[calc(100vh-22rem)] pr-3">
+        <div className="relative mb-4">
+          <SearchIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search by name or ID..."
+            className="pl-8 w-full h-9"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            aria-label="Search entities"
+          />
+        </div>
+        <ScrollArea className="h-[calc(100vh-24rem)] md:h-[calc(100vh-26rem)] pr-3">
           {relevantEntities.length > 0 ? relevantEntities.map((entity) => (
             <div key={entity.entity_id} className="flex items-center space-x-3 p-2.5 rounded-md hover:bg-muted/50 transition-colors">
               <Checkbox
@@ -88,7 +135,7 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
                 <span className="ml-2 text-xs text-muted-foreground">({entity.state} {entity.attributes.unit_of_measurement || ''})</span>
               </Label>
             </div>
-          )) : <p className="text-muted-foreground p-2">No numerical sensor entities found to display.</p>}
+          )) : <p className="text-muted-foreground p-2">No numerical sensor entities match your search, or none are available.</p>}
         </ScrollArea>
       </CardContent>
     </Card>
@@ -96,3 +143,4 @@ const EntityList: FC<EntityListProps> = ({ entities, selectedEntityIds, onSelect
 };
 
 export default EntityList;
+
