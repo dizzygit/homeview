@@ -15,9 +15,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedUrl = homeAssistantUrl.replace(/\/$/, ""); // Remove trailing slash
 
-    // HA API expects ISO string for history period
-    // Example: /api/history/period/2021-08-30T10:00:00Z?filter_entity_id=sensor.temperature&end_time=2021-08-30T11:00:00Z
-    // The start_time is path parameter, end_time is query parameter
     const historyUrl = `${normalizedUrl}/api/history/period/${startDateISO}?filter_entity_id=${entityId}&end_time=${endDateISO}&minimal_response`;
     
     const response = await fetch(historyUrl, {
@@ -26,7 +23,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      cache: 'no-store', // Ensure fresh data
+      cache: 'no-store', 
     });
 
     if (!response.ok) {
@@ -46,13 +43,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Home Assistant API Error fetching history for ${entityId} (${response.status}): ${errorData}` }, { status: response.status });
     }
     
-    const historyResponse: EntityHistoryPoint[][] = await response.json();
-    // If the entity has no history, HA returns an empty array for that entity: `[[]]` if one entity, or `[]` if no data at all for any requested.
-    // Or it can be `[[{...}, {...}]]`
-    const entityHistory = historyResponse.length > 0 ? (historyResponse[0] || []) : [];
+    const haResponseData: any = await response.json();
+    let rawPointsList: any[] = [];
 
+    if (Array.isArray(haResponseData) && haResponseData.length > 0 && Array.isArray(haResponseData[0])) {
+      // Standard HA response: [[{point1}, {point2}]]
+      rawPointsList = haResponseData[0] || [];
+    } else if (Array.isArray(haResponseData)) {
+      // Alternative HA response for single entity (or if minimal_response behaves differently): [{point1}, {point2}]
+      rawPointsList = haResponseData;
+    } else {
+      console.warn(`Unexpected history format from Home Assistant for ${entityId}:`, haResponseData);
+    }
 
-    return NextResponse.json(entityHistory);
+    const processedHistory: EntityHistoryPoint[] = rawPointsList.map((p: any) => {
+      let timestampInSeconds: number | undefined = undefined;
+      const stateValue = p.s !== undefined ? String(p.s) : (p.state !== undefined ? String(p.state) : undefined);
+
+      if (typeof p.lu === 'number') { // Unix timestamp (seconds) from minimal_response
+        timestampInSeconds = p.lu;
+      } else if (typeof p.last_updated === 'string') { // ISO string
+        timestampInSeconds = new Date(p.last_updated).getTime() / 1000;
+      } else if (typeof p.last_changed === 'string') { // ISO string (fallback)
+        timestampInSeconds = new Date(p.last_changed).getTime() / 1000;
+      }
+
+      if (stateValue === undefined || timestampInSeconds === undefined || isNaN(timestampInSeconds)) {
+        // console.warn(`Skipping invalid history point for ${entityId}:`, p);
+        return null; 
+      }
+      return { s: stateValue, lu: timestampInSeconds };
+    }).filter(p => p !== null) as EntityHistoryPoint[];
+    
+    // Sort by timestamp just in case HA doesn't guarantee order (it usually does)
+    processedHistory.sort((a, b) => a.lu - b.lu);
+
+    return NextResponse.json(processedHistory);
   } catch (error) {
     console.error(`Error in /api/homeassistant/history for ${entityIdForLogging || 'unknown entity'}:`, error);
     const message = error instanceof Error ? error.message : 'Internal Server Error';
