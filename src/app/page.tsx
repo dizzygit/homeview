@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { NextPage } from 'next';
-import { HomeIcon, LogOut, Loader2 } from 'lucide-react';
+import { HomeIcon, LogOut } from 'lucide-react';
 
 import ConnectionForm from '@/components/homeview/ConnectionForm';
 import type { ConnectionFormValues } from '@/components/homeview/ConnectionForm';
@@ -13,53 +13,11 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import type { Entity, FormattedChartDataPoint, EntityHistoryPoint } from '@/types/home-assistant';
 
-// Mock API functions
-const MOCK_API_DELAY = 1000;
-
-// Updated mock function signatures
-const mockFetchEntities = async (homeAssistantUrl: string, username?: string, password?: string): Promise<Entity[]> => {
-  console.log('Mock fetching entities from:', homeAssistantUrl, 'with user:', username);
-  await new Promise(resolve => setTimeout(resolve, MOCK_API_DELAY));
-  // Simulate API error
-  // if (Math.random() < 0.2) throw new Error("Failed to fetch entities (simulated)");
-  return [
-    { entity_id: 'sensor.living_room_temperature', state: '22.5', attributes: { friendly_name: 'Living Room Temp', unit_of_measurement: '°C', device_class: 'temperature' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} },
-    { entity_id: 'sensor.office_humidity', state: '45.2', attributes: { friendly_name: 'Office Humidity', unit_of_measurement: '%', device_class: 'humidity' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} },
-    { entity_id: 'sensor.bedroom_light_level', state: '150', attributes: { friendly_name: 'Bedroom Light', unit_of_measurement: 'lx', device_class: 'illuminance' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} },
-    { entity_id: 'sensor.power_consumption', state: '350.7', attributes: { friendly_name: 'Power Consumption', unit_of_measurement: 'W', device_class: 'power' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} },
-    { entity_id: 'light.living_room_lamp', state: 'on', attributes: { friendly_name: 'Living Room Lamp' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} }, // Not a numerical sensor
-    { entity_id: 'switch.fan', state: 'off', attributes: { friendly_name: 'Fan Switch' }, last_changed: '', last_updated: '', context: { id: '', parent_id: null, user_id: null} }, // Not a numerical sensor
-  ];
-};
-
-const mockFetchEntityHistory = async (entityId: string, homeAssistantUrl: string, username?: string, password?: string): Promise<EntityHistoryPoint[]> => {
-  console.log(`Mock fetching history for ${entityId} from ${homeAssistantUrl} with user: ${username}`);
-  await new Promise(resolve => setTimeout(resolve, MOCK_API_DELAY / 2));
-  // if (Math.random() < 0.1) throw new Error(\`Failed to fetch history for \${entityId} (simulated)\`);
-  
-  const now = Date.now();
-  const history: EntityHistoryPoint[] = [];
-  for (let i = 59; i >= 0; i--) { // Last 60 minutes, one point per minute
-    const timestamp = now - i * 60 * 1000;
-    let value;
-    if (entityId.includes('temperature')) value = 20 + Math.random() * 5;
-    else if (entityId.includes('humidity')) value = 40 + Math.random() * 10;
-    else if (entityId.includes('light')) value = Math.random() * 300;
-    else value = Math.random() * 500;
-    history.push({ lu: Math.floor(timestamp / 1000) , s: parseFloat(value.toFixed(1)) });
-  }
-  return history;
-};
-
-
 const HomeViewPage: NextPage = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [homeAssistantUrl, setHomeAssistantUrl] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
-  // Password should generally not be stored in state directly in a real app,
-  // but for this mock setup, we might need it for subsequent mock calls.
-  // In a real app, a session/token would be established.
-  const [password, setPassword] = useState<string | null>(null); 
+  const [password, setPassword] = useState<string | null>(null); // This will store the token (LLAT)
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
@@ -70,12 +28,25 @@ const HomeViewPage: NextPage = () => {
   const handleConnect = async (values: ConnectionFormValues) => {
     setLoading(prev => ({ ...prev, connect: true, entities: true }));
     try {
-      // In a real app, you would authenticate here and get a session token
-      // For now, we just store credentials and fetch entities
-      const fetchedEntities = await mockFetchEntities(values.homeAssistantUrl, values.username, values.password);
+      const response = await fetch('/api/homeassistant/entities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          homeAssistantUrl: values.homeAssistantUrl,
+          token: values.password, // Using password field as token
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to connect: ${response.statusText}`);
+      }
+
+      const fetchedEntities: Entity[] = await response.json();
+      
       setHomeAssistantUrl(values.homeAssistantUrl);
-      setUsername(values.username);
-      setPassword(values.password); // Storing for mock purposes
+      setUsername(values.username); // Storing username as per form, though not used in HA API calls if password is LLAT
+      setPassword(values.password); // Storing token (LLAT)
       setEntities(fetchedEntities);
       setIsConnected(true);
       toast({ title: "Successfully Connected", description: "Fetched entities from Home Assistant." });
@@ -107,7 +78,7 @@ const HomeViewPage: NextPage = () => {
   const formatChartData = (historyData: Record<string, EntityHistoryPoint[]>): FormattedChartDataPoint[] => {
     const allTimestamps = new Set<number>();
     Object.values(historyData).forEach(entityHistory => {
-      entityHistory.forEach(point => allTimestamps.add(point.lu * 1000));
+      entityHistory.forEach(point => allTimestamps.add(point.lu * 1000)); // HA lu is in seconds
     });
 
     const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
@@ -130,19 +101,35 @@ const HomeViewPage: NextPage = () => {
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !homeAssistantUrl ) { // Removed token, username/password check for simplicity here as mock doesn't strictly need them after initial connect for this part
+    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !password) {
       setChartData([]);
       return;
     }
 
     setLoading(prev => ({ ...prev, chart: true }));
     try {
-      const historyPromises = selectedEntityIds.map(id => mockFetchEntityHistory(id, homeAssistantUrl, username ?? undefined, password ?? undefined));
-      const historiesArray = await Promise.all(historyPromises);
+      const historyPromises = selectedEntityIds.map(async (id) => {
+        const response = await fetch('/api/homeassistant/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entityId: id,
+            homeAssistantUrl,
+            token: password,
+          }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed to fetch history for ${id}: ${response.statusText}`);
+        }
+        return { id, history: await response.json() as EntityHistoryPoint[] };
+      });
+      
+      const results = await Promise.all(historyPromises);
       
       const historiesMap: Record<string, EntityHistoryPoint[]> = {};
-      selectedEntityIds.forEach((id, index) => {
-        historiesMap[id] = historiesArray[index];
+      results.forEach(result => {
+        historiesMap[result.id] = result.history;
       });
       
       const formattedData = formatChartData(historiesMap);
@@ -154,32 +141,45 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, homeAssistantUrl, username, password, toast]);
-
+  }, [selectedEntityIds, homeAssistantUrl, password, toast]); // username removed as it's not used for token auth for HA API
 
   useEffect(() => {
     fetchChartData();
   }, [fetchChartData]);
 
-  // Simulate real-time updates
+  // Simulate real-time updates (can be removed or enhanced to re-fetch real data)
   useEffect(() => {
     if (!isConnected || selectedEntityIds.length === 0 || loading.chart) return;
 
     const interval = setInterval(() => {
       setChartData(prevData => {
-        if (prevData.length === 0) return prevData; 
+        if (prevData.length === 0 && selectedEntityIds.length > 0) {
+          // If no data but entities selected, perhaps fetch again or wait
+          // For now, let's not add random data if initial real data was empty.
+          console.warn("Real-time update skipped: No initial data to base random updates on.");
+          return prevData;
+        }
+        if (prevData.length === 0) return prevData;
+
 
         const newDataPoint: FormattedChartDataPoint = {
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         };
         
         selectedEntityIds.forEach(id => {
-          const lastValue = prevData.length > 0 ? Number(prevData[prevData.length - 1][id]) : (Math.random() * 100);
-          const change = (Math.random() - 0.5) * (lastValue * 0.05); 
-          let newValue = lastValue + change;
-          if (id.includes('humidity')) newValue = Math.max(0, Math.min(100, newValue)); 
-          
-          newDataPoint[id] = parseFloat(newValue.toFixed(1));
+          const lastPoint = prevData[prevData.length - 1];
+          const lastValue = lastPoint && lastPoint[id] !== undefined ? Number(lastPoint[id]) : (Math.random() * 100);
+
+          // Only apply random updates if lastValue is a valid number
+          if (!isNaN(lastValue)) {
+            const change = (Math.random() - 0.5) * (lastValue * 0.05); 
+            let newValue = lastValue + change;
+            if (id.includes('humidity')) newValue = Math.max(0, Math.min(100, newValue)); 
+            newDataPoint[id] = parseFloat(newValue.toFixed(1));
+          } else {
+            // If last value was NaN, keep it NaN or use a placeholder
+            newDataPoint[id] = NaN; 
+          }
         });
 
         const updatedData = [...prevData, newDataPoint];
@@ -239,4 +239,3 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
-
