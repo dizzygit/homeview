@@ -109,7 +109,7 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s);
-            const sanitizedStateString = stateString.replace(',', '.');
+            const sanitizedStateString = stateString.replace(',', '.'); // Handle comma decimal separators
             numericValue = Number(sanitizedStateString);
           }
           dataPoint[id] = numericValue;
@@ -155,10 +155,10 @@ const HomeViewPage: NextPage = () => {
             const errorData = await response.json();
             errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
           } catch (e) {
-             try { errorDetails = await response.text(); } catch (e) { /* ignore */ }
+             try { errorDetails = await response.text(); } catch (fetchError) { console.error("Error reading response text:", fetchError)}
           }
           console.error(`Failed to fetch history for ${id}: ${errorDetails}`);
-          throw new Error(`Failed to fetch history for ${id}. ${errorDetails.substring(0,100)}`);
+          throw new Error(`Failed to fetch history for ${id}. Details: ${errorDetails.substring(0,100)}`);
         }
         const history = await response.json() as EntityHistoryPoint[];
         return { id, history };
@@ -184,10 +184,12 @@ const HomeViewPage: NextPage = () => {
 
   useEffect(() => {
     // Only fetch if startDate and endDate are initialized
-    if (startDate && endDate) {
+    if (startDate && endDate && selectedEntityIds.length > 0) {
       fetchChartData();
+    } else if (selectedEntityIds.length === 0) {
+      setChartData([]); // Clear chart data if no entities are selected
     }
-  }, [fetchChartData, startDate, endDate]); // Add startDate and endDate as dependencies
+  }, [fetchChartData, startDate, endDate, selectedEntityIds]); 
 
   // Real-time data fetching logic (periodic refresh)
   useEffect(() => {
@@ -201,7 +203,7 @@ const HomeViewPage: NextPage = () => {
     }, 60000); // Fetch every 60 seconds
 
     return () => clearInterval(interval);
-  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]); // Add startDate and endDate
+  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
   
   const chartConfig: AppChartConfig = entities
     .filter(e => selectedEntityIds.includes(e.entity_id))
@@ -238,7 +240,7 @@ const HomeViewPage: NextPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-3"> {/* Adjusted from lg:col-span-2 */}
               <EntityList
                 entities={entities}
                 selectedEntityIds={selectedEntityIds}
@@ -246,7 +248,7 @@ const HomeViewPage: NextPage = () => {
                 loading={loading.entities}
               />
             </div>
-            <div className="lg:col-span-5 space-y-6">
+            <div className="lg:col-span-4 space-y-6"> {/* Adjusted from lg:col-span-5 */}
               <div className="flex flex-col sm:flex-row gap-4 items-center p-4 border rounded-lg bg-card shadow">
                 <DatePicker date={startDate} setDate={setStartDate} placeholder="Start Date & Time" disabled={loading.chart || !startDate} className="w-full sm:w-auto"/>
                 <DatePicker date={endDate} setDate={setEndDate} placeholder="End Date & Time" disabled={loading.chart || !endDate} className="w-full sm:w-auto"/>
@@ -287,4 +289,3 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
-
