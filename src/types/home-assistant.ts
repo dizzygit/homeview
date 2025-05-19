@@ -1,3 +1,4 @@
+
 export interface EntityAttributes {
   friendly_name?: string;
   unit_of_measurement?: string;
@@ -20,13 +21,14 @@ export interface Entity {
 }
 
 export interface EntityHistoryPoint {
-  lu: number; // Unix timestamp (last_updated)
+  lu: number; // Unix timestamp (last_updated) in seconds
   s: string | number; // state
 }
 
 export interface FormattedChartDataPoint {
   time: string; // Formatted time string for chart axis (e.g., "HH:mm:ss")
-  [entityId: string]: number | string; // value for each entity
+  fullTime?: string; // More detailed time string for table (e.g., "yyyy-MM-dd HH:mm:ss")
+  [entityId: string]: number | string | undefined; // value for each entity
 }
 
 export type ChartConfig = {

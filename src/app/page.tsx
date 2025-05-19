@@ -4,14 +4,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { NextPage } from 'next';
 import { HomeIcon, LogOut } from 'lucide-react';
+import { subHours, format } from 'date-fns';
 
 import ConnectionForm from '@/components/homeview/ConnectionForm';
 import type { ConnectionFormValues } from '@/components/homeview/ConnectionForm';
 import EntityList from '@/components/homeview/EntityList';
 import DynamicChart from '@/components/homeview/DynamicChart';
+import DataTable from '@/components/homeview/DataTable'; // Import DataTable
+import { DatePicker } from '@/components/ui/date-picker'; // Import DatePicker
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import type { Entity, FormattedChartDataPoint, EntityHistoryPoint } from '@/types/home-assistant';
+import type { Entity, FormattedChartDataPoint, EntityHistoryPoint, ChartConfig as AppChartConfig } from '@/types/home-assistant';
 
 const HomeViewPage: NextPage = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -21,6 +24,9 @@ const HomeViewPage: NextPage = () => {
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
   const [loading, setLoading] = useState({ connect: false, entities: false, chart: false });
+  
+  const [startDate, setStartDate] = useState<Date | undefined>(subHours(new Date(), 24));
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
 
   const { toast } = useToast();
 
@@ -63,6 +69,8 @@ const HomeViewPage: NextPage = () => {
     setEntities([]);
     setSelectedEntityIds([]);
     setChartData([]);
+    setStartDate(subHours(new Date(), 24));
+    setEndDate(new Date());
     toast({ title: "Disconnected", description: "You have been disconnected from Home Assistant." });
   };
 
@@ -82,7 +90,9 @@ const HomeViewPage: NextPage = () => {
     
     const formattedPoints = sortedTimestamps.map(timestamp => {
       const dataPoint: FormattedChartDataPoint = {
-        time: new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        // Format for chart (HH:mm or HH:mm:ss) and table (full date time)
+        time: format(new Date(timestamp), "HH:mm:ss"), // For chart X-axis
+        fullTime: format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss"), // For table display
       };
       selectedEntityIds.forEach(id => {
         const entityHistory = historyData[id];
@@ -92,28 +102,30 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s);
-            // Attempt to replace comma with period for locales that use comma as decimal separator
             const sanitizedStateString = stateString.replace(',', '.');
             numericValue = Number(sanitizedStateString);
           }
           dataPoint[id] = numericValue;
         } else {
-          dataPoint[id] = NaN; // Entity might not have history data or not be in selection
+          dataPoint[id] = NaN; 
         }
       });
       return dataPoint;
     });
 
-    // Filter out data points where all selected entities have NaN values
     return formattedPoints.filter(dp => 
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
     );
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token) {
+    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token || !startDate || !endDate) {
       setChartData([]);
       return;
+    }
+    if (startDate > endDate) {
+        toast({ variant: "destructive", title: "Date Error", description: "Start date cannot be after end date."});
+        return;
     }
 
     setLoading(prev => ({ ...prev, chart: true }));
@@ -126,6 +138,8 @@ const HomeViewPage: NextPage = () => {
             entityId: id,
             homeAssistantUrl,
             token: token,
+            startDateISO: startDate.toISOString(),
+            endDateISO: endDate.toISOString(),
           }),
         });
         if (!response.ok) {
@@ -134,10 +148,7 @@ const HomeViewPage: NextPage = () => {
             const errorData = await response.json();
             errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
           } catch (e) {
-            // If error response is not JSON, try to get text
-             try {
-                errorDetails = await response.text();
-             } catch (e) { /* ignore */ }
+             try { errorDetails = await response.text(); } catch (e) { /* ignore */ }
           }
           console.error(`Failed to fetch history for ${id}: ${errorDetails}`);
           throw new Error(`Failed to fetch history for ${id}. ${errorDetails.substring(0,100)}`);
@@ -162,22 +173,34 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, homeAssistantUrl, token, toast]);
+  }, [selectedEntityIds, homeAssistantUrl, token, startDate, endDate, toast]);
 
   useEffect(() => {
     fetchChartData();
   }, [fetchChartData]);
 
-  // Real-time data fetching for chart updates
+  // Real-time data fetching for chart updates (if desired, or remove if manual refresh via date pickers is enough)
   useEffect(() => {
     if (!isConnected || selectedEntityIds.length === 0 || loading.chart) return;
 
     const interval = setInterval(() => {
       fetchChartData();
-    }, 30000); // Fetch every 30 seconds
+    }, 60000); // Fetch every 60 seconds, adjust as needed
 
     return () => clearInterval(interval);
   }, [isConnected, selectedEntityIds, loading.chart, fetchChartData]);
+  
+  const chartConfig: AppChartConfig = entities
+    .filter(e => selectedEntityIds.includes(e.entity_id))
+    .reduce((acc, entity, index) => {
+      const chartColors = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+      acc[entity.entity_id] = {
+        label: entity.attributes.friendly_name || entity.entity_id,
+        color: chartColors[index % chartColors.length],
+      };
+      return acc;
+    }, {} as AppChartConfig);
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -201,18 +224,35 @@ const HomeViewPage: NextPage = () => {
             <ConnectionForm onConnect={handleConnect} loading={loading.connect} />
           </div>
         ) : (
-          <div className="flex flex-col md:flex-row gap-6">
-            <EntityList
-              entities={entities}
-              selectedEntityIds={selectedEntityIds}
-              onSelectionChange={handleEntitySelectionChange}
-              loading={loading.entities}
-            />
-            <DynamicChart
-              data={chartData}
-              selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
-              loading={loading.chart}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
+            <div className="lg:col-span-2">
+              <EntityList
+                entities={entities}
+                selectedEntityIds={selectedEntityIds}
+                onSelectionChange={handleEntitySelectionChange}
+                loading={loading.entities}
+              />
+            </div>
+            <div className="lg:col-span-5 space-y-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-center p-4 border rounded-lg bg-card shadow">
+                <DatePicker date={startDate} setDate={setStartDate} placeholder="Start Date & Time" disabled={loading.chart} className="w-full sm:w-auto"/>
+                <DatePicker date={endDate} setDate={setEndDate} placeholder="End Date & Time" disabled={loading.chart} className="w-full sm:w-auto"/>
+                <Button onClick={fetchChartData} disabled={loading.chart || selectedEntityIds.length === 0} className="w-full sm:w-auto">
+                  {loading.chart ? "Refreshing..." : "Refresh Data"}
+                </Button>
+              </div>
+              <DynamicChart
+                data={chartData}
+                selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
+                loading={loading.chart}
+              />
+              <DataTable
+                data={chartData.map(dp => ({...dp, time: dp.fullTime || dp.time }))} // Use fullTime for table
+                selectedEntities={entities.filter(e => selectedEntityIds.includes(e.entity_id))}
+                chartConfig={chartConfig}
+                loading={loading.chart}
+              />
+            </div>
           </div>
         )}
       </main>

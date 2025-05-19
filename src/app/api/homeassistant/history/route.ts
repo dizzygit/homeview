@@ -6,21 +6,19 @@ import type { EntityHistoryPoint } from '@/types/home-assistant';
 export async function POST(request: NextRequest) {
   let entityIdForLogging: string | undefined;
   try {
-    const { entityId, homeAssistantUrl, token } = await request.json();
+    const { entityId, homeAssistantUrl, token, startDateISO, endDateISO } = await request.json();
     entityIdForLogging = entityId;
 
-    if (!entityId || !homeAssistantUrl || !token) {
-      return NextResponse.json({ error: 'Missing entityId, Home Assistant URL, or Token' }, { status: 400 });
+    if (!entityId || !homeAssistantUrl || !token || !startDateISO || !endDateISO) {
+      return NextResponse.json({ error: 'Missing entityId, Home Assistant URL, Token, Start Date, or End Date' }, { status: 400 });
     }
 
     const normalizedUrl = homeAssistantUrl.replace(/\/$/, ""); // Remove trailing slash
 
-    const endDate = new Date();
-    const startDate = new Date(endDate.getTime() - 60 * 60 * 1000); // 1 hour ago
-
     // HA API expects ISO string for history period
     // Example: /api/history/period/2021-08-30T10:00:00Z?filter_entity_id=sensor.temperature&end_time=2021-08-30T11:00:00Z
-    const historyUrl = `${normalizedUrl}/api/history/period/${startDate.toISOString()}?filter_entity_id=${entityId}&end_time=${endDate.toISOString()}&minimal_response`;
+    // The start_time is path parameter, end_time is query parameter
+    const historyUrl = `${normalizedUrl}/api/history/period/${startDateISO}?filter_entity_id=${entityId}&end_time=${endDateISO}&minimal_response`;
     
     const response = await fetch(historyUrl, {
       method: 'GET',
@@ -44,7 +42,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         // ignore
       }
-      console.error(`HA API Error (history for ${entityId}):`, response.status, errorData);
+      console.error(`HA API Error (history for ${entityId}):`, response.status, errorData, historyUrl);
       return NextResponse.json({ error: `Home Assistant API Error fetching history for ${entityId} (${response.status}): ${errorData}` }, { status: response.status });
     }
     
