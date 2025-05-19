@@ -130,6 +130,7 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
                 // Name for legend from the passed chartConfig
                 name={chartConfig[entity.entity_id]?.label || entity.entity_id}
                 animationDuration={300} 
+                connectNulls={true} // Add this prop
               />
             ))}
           </LineChart>
@@ -140,3 +141,4 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
 };
 
 export default DynamicChart;
+
