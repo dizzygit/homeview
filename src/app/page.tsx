@@ -16,8 +16,7 @@ import type { Entity, FormattedChartDataPoint, EntityHistoryPoint } from '@/type
 const HomeViewPage: NextPage = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [homeAssistantUrl, setHomeAssistantUrl] = useState<string | null>(null);
-  const [username, setUsername] = useState<string | null>(null);
-  const [password, setPassword] = useState<string | null>(null); // This will store the token (LLAT)
+  const [token, setToken] = useState<string | null>(null); // Changed from password to token
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
@@ -33,7 +32,7 @@ const HomeViewPage: NextPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           homeAssistantUrl: values.homeAssistantUrl,
-          token: values.password, // Using password field as token
+          token: values.token, // Use token from form
         }),
       });
 
@@ -45,8 +44,7 @@ const HomeViewPage: NextPage = () => {
       const fetchedEntities: Entity[] = await response.json();
       
       setHomeAssistantUrl(values.homeAssistantUrl);
-      setUsername(values.username); // Storing username as per form, though not used in HA API calls if password is LLAT
-      setPassword(values.password); // Storing token (LLAT)
+      setToken(values.token); // Store token
       setEntities(fetchedEntities);
       setIsConnected(true);
       toast({ title: "Successfully Connected", description: "Fetched entities from Home Assistant." });
@@ -61,8 +59,7 @@ const HomeViewPage: NextPage = () => {
   const handleDisconnect = () => {
     setIsConnected(false);
     setHomeAssistantUrl(null);
-    setUsername(null);
-    setPassword(null);
+    setToken(null); // Clear token
     setEntities([]);
     setSelectedEntityIds([]);
     setChartData([]);
@@ -91,17 +88,19 @@ const HomeViewPage: NextPage = () => {
         const entityHistory = historyData[id];
         if (entityHistory) {
           const point = entityHistory.find(p => p.lu * 1000 === timestamp);
+          // Ensure state 's' is treated as a number. If it's not a number, it will become NaN.
           dataPoint[id] = point ? Number(point.s) : NaN; 
         }
       });
       return dataPoint;
     }).filter(dp => 
+        // Ensure we only keep data points where at least one selected entity has a valid numerical value
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(Number(dp[id])))
     );
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !password) {
+    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token) { // Check for token
       setChartData([]);
       return;
     }
@@ -115,7 +114,7 @@ const HomeViewPage: NextPage = () => {
           body: JSON.stringify({
             entityId: id,
             homeAssistantUrl,
-            token: password,
+            token: token, // Use stored token
           }),
         });
         if (!response.ok) {
@@ -141,54 +140,22 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, homeAssistantUrl, password, toast]); // username removed as it's not used for token auth for HA API
+  }, [selectedEntityIds, homeAssistantUrl, token, toast]); // Added token to dependencies
 
   useEffect(() => {
     fetchChartData();
   }, [fetchChartData]);
 
-  // Simulate real-time updates (can be removed or enhanced to re-fetch real data)
+  // Real-time data fetching for chart updates
   useEffect(() => {
     if (!isConnected || selectedEntityIds.length === 0 || loading.chart) return;
 
     const interval = setInterval(() => {
-      setChartData(prevData => {
-        if (prevData.length === 0 && selectedEntityIds.length > 0) {
-          // If no data but entities selected, perhaps fetch again or wait
-          // For now, let's not add random data if initial real data was empty.
-          console.warn("Real-time update skipped: No initial data to base random updates on.");
-          return prevData;
-        }
-        if (prevData.length === 0) return prevData;
-
-
-        const newDataPoint: FormattedChartDataPoint = {
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        };
-        
-        selectedEntityIds.forEach(id => {
-          const lastPoint = prevData[prevData.length - 1];
-          const lastValue = lastPoint && lastPoint[id] !== undefined ? Number(lastPoint[id]) : (Math.random() * 100);
-
-          // Only apply random updates if lastValue is a valid number
-          if (!isNaN(lastValue)) {
-            const change = (Math.random() - 0.5) * (lastValue * 0.05); 
-            let newValue = lastValue + change;
-            if (id.includes('humidity')) newValue = Math.max(0, Math.min(100, newValue)); 
-            newDataPoint[id] = parseFloat(newValue.toFixed(1));
-          } else {
-            // If last value was NaN, keep it NaN or use a placeholder
-            newDataPoint[id] = NaN; 
-          }
-        });
-
-        const updatedData = [...prevData, newDataPoint];
-        return updatedData.slice(-60); 
-      });
-    }, 5000); 
+      fetchChartData(); // Re-fetch real data periodically
+    }, 30000); // Fetch every 30 seconds, adjust as needed
 
     return () => clearInterval(interval);
-  }, [isConnected, selectedEntityIds, loading.chart]);
+  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData]); // Added fetchChartData
 
   return (
     <div className="flex flex-col min-h-screen bg-background">

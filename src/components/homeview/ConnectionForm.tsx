@@ -7,15 +7,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"; // Keep if used by FormLabel
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plug } from 'lucide-react';
+import { Plug, KeyRound } from 'lucide-react'; // Added KeyRound for token
 
 const formSchema = z.object({
   homeAssistantUrl: z.string().url({ message: "Please enter a valid URL for your Home Assistant instance." }),
-  username: z.string().min(1, { message: "Username cannot be empty." }),
-  password: z.string().min(1, { message: "Password cannot be empty." }),
+  token: z.string().min(1, { message: "Long-Lived Access Token cannot be empty." }),
 });
 
 export type ConnectionFormValues = z.infer<typeof formSchema>;
@@ -30,8 +29,7 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       homeAssistantUrl: "",
-      username: "",
-      password: "",
+      token: "",
     },
   });
 
@@ -43,7 +41,7 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
           Connect to Home Assistant
         </CardTitle>
         <CardDescription>
-          Enter your Home Assistant instance URL, Username, and Password.
+          Enter your Home Assistant instance URL and Long-Lived Access Token.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -64,25 +62,14 @@ const ConnectionForm: FC<ConnectionFormProps> = ({ onConnect, loading }) => {
             />
             <FormField
               control={form.control}
-              name="username"
+              name="token"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Username</FormLabel>
+                  <FormLabel className="flex items-center gap-1">
+                    <KeyRound className="h-4 w-4" /> Long-Lived Access Token
+                  </FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter your username" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input type="password" placeholder="Enter your password" {...field} />
+                    <Input type="password" placeholder="Enter your Long-Lived Access Token" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
