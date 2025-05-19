@@ -16,7 +16,7 @@ import type { Entity, FormattedChartDataPoint, EntityHistoryPoint } from '@/type
 const HomeViewPage: NextPage = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [homeAssistantUrl, setHomeAssistantUrl] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null); // Changed from password to token
+  const [token, setToken] = useState<string | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
@@ -32,7 +32,7 @@ const HomeViewPage: NextPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           homeAssistantUrl: values.homeAssistantUrl,
-          token: values.token, // Use token from form
+          token: values.token,
         }),
       });
 
@@ -44,7 +44,7 @@ const HomeViewPage: NextPage = () => {
       const fetchedEntities: Entity[] = await response.json();
       
       setHomeAssistantUrl(values.homeAssistantUrl);
-      setToken(values.token); // Store token
+      setToken(values.token);
       setEntities(fetchedEntities);
       setIsConnected(true);
       toast({ title: "Successfully Connected", description: "Fetched entities from Home Assistant." });
@@ -59,7 +59,7 @@ const HomeViewPage: NextPage = () => {
   const handleDisconnect = () => {
     setIsConnected(false);
     setHomeAssistantUrl(null);
-    setToken(null); // Clear token
+    setToken(null);
     setEntities([]);
     setSelectedEntityIds([]);
     setChartData([]);
@@ -74,13 +74,13 @@ const HomeViewPage: NextPage = () => {
 
   const formatChartData = (historyData: Record<string, EntityHistoryPoint[]>): FormattedChartDataPoint[] => {
     const allTimestamps = new Set<number>();
-    Object.values(historyData).forEach(entityHistory => {
-      entityHistory.forEach(point => allTimestamps.add(point.lu * 1000)); // HA lu is in seconds
+    Object.values(historyData).forEach(entityHistoryList => {
+      entityHistoryList.forEach(point => allTimestamps.add(point.lu * 1000)); // HA lu is in seconds
     });
 
     const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
     
-    return sortedTimestamps.map(timestamp => {
+    const formattedPoints = sortedTimestamps.map(timestamp => {
       const dataPoint: FormattedChartDataPoint = {
         time: new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       };
@@ -88,19 +88,30 @@ const HomeViewPage: NextPage = () => {
         const entityHistory = historyData[id];
         if (entityHistory) {
           const point = entityHistory.find(p => p.lu * 1000 === timestamp);
-          // Ensure state 's' is treated as a number. If it's not a number, it will become NaN.
-          dataPoint[id] = point ? Number(point.s) : NaN; 
+          
+          let numericValue = NaN;
+          if (point && point.s !== null && point.s !== undefined) {
+            const stateString = String(point.s);
+            // Attempt to replace comma with period for locales that use comma as decimal separator
+            const sanitizedStateString = stateString.replace(',', '.');
+            numericValue = Number(sanitizedStateString);
+          }
+          dataPoint[id] = numericValue;
+        } else {
+          dataPoint[id] = NaN; // Entity might not have history data or not be in selection
         }
       });
       return dataPoint;
-    }).filter(dp => 
-        // Ensure we only keep data points where at least one selected entity has a valid numerical value
-        selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(Number(dp[id])))
+    });
+
+    // Filter out data points where all selected entities have NaN values
+    return formattedPoints.filter(dp => 
+        selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
     );
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token) { // Check for token
+    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token) {
       setChartData([]);
       return;
     }
@@ -114,14 +125,25 @@ const HomeViewPage: NextPage = () => {
           body: JSON.stringify({
             entityId: id,
             homeAssistantUrl,
-            token: token, // Use stored token
+            token: token,
           }),
         });
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `Failed to fetch history for ${id}: ${response.statusText}`);
+          let errorDetails = `Status: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorDetails = errorData.error || errorData.message || JSON.stringify(errorData);
+          } catch (e) {
+            // If error response is not JSON, try to get text
+             try {
+                errorDetails = await response.text();
+             } catch (e) { /* ignore */ }
+          }
+          console.error(`Failed to fetch history for ${id}: ${errorDetails}`);
+          throw new Error(`Failed to fetch history for ${id}. ${errorDetails.substring(0,100)}`);
         }
-        return { id, history: await response.json() as EntityHistoryPoint[] };
+        const history = await response.json() as EntityHistoryPoint[];
+        return { id, history };
       });
       
       const results = await Promise.all(historyPromises);
@@ -140,7 +162,7 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, homeAssistantUrl, token, toast]); // Added token to dependencies
+  }, [selectedEntityIds, homeAssistantUrl, token, toast]);
 
   useEffect(() => {
     fetchChartData();
@@ -151,11 +173,11 @@ const HomeViewPage: NextPage = () => {
     if (!isConnected || selectedEntityIds.length === 0 || loading.chart) return;
 
     const interval = setInterval(() => {
-      fetchChartData(); // Re-fetch real data periodically
-    }, 30000); // Fetch every 30 seconds, adjust as needed
+      fetchChartData();
+    }, 30000); // Fetch every 30 seconds
 
     return () => clearInterval(interval);
-  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData]); // Added fetchChartData
+  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData]);
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
