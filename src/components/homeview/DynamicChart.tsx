@@ -122,10 +122,9 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
                 key={entity.entity_id}
                 dataKey={entity.entity_id}
                 type="monotone"
-                // stroke={`var(--color-${entity.entity_id})`}
-                stroke="red" // DIAGNOSTIC: Using a hardcoded color
+                stroke={chartConfig[entity.entity_id]?.color || 'hsl(var(--foreground))'} // Use color from config directly
                 strokeWidth={2}
-                dot={true} 
+                dot={false} // Remove dots
                 name={chartConfig[entity.entity_id]?.label || entity.entity_id}
                 animationDuration={300} 
                 connectNulls={true} 
@@ -139,3 +138,4 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
 };
 
 export default DynamicChart;
+
