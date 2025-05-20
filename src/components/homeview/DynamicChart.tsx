@@ -17,7 +17,7 @@ import { LineChartIcon, Info } from 'lucide-react';
 interface DynamicChartProps {
   data: FormattedChartDataPoint[];
   selectedEntities: Entity[];
-  chartConfig: AppChartConfig; // Accept chartConfig as a prop
+  chartConfig: AppChartConfig; 
   loading: boolean;
 }
 
@@ -105,7 +105,7 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(value) => String(value).slice(0, 5)} // Show HH:mm
+              tickFormatter={(value) => String(value).slice(0, 5)} 
             />
             <YAxis
               tickLine={false}
@@ -122,9 +122,9 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
                 key={entity.entity_id}
                 dataKey={entity.entity_id}
                 type="monotone"
-                stroke={chartConfig[entity.entity_id]?.color || 'hsl(var(--foreground))'} // Use color from config directly
+                stroke={`var(--color-${entity.entity_id})`} 
                 strokeWidth={2}
-                dot={false} // Remove dots
+                dot={false}
                 name={chartConfig[entity.entity_id]?.label || entity.entity_id}
                 animationDuration={300} 
                 connectNulls={true} 

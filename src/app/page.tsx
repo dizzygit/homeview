@@ -209,10 +209,16 @@ const HomeViewPage: NextPage = () => {
   const appChartConfig: AppChartConfig = entities
     .filter(e => selectedEntityIds.includes(e.entity_id))
     .reduce((acc, entity, index) => {
-      const chartColorCssVars = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
+      const chartColorStrings = [
+        "hsl(var(--chart-1))", 
+        "hsl(var(--chart-2))", 
+        "hsl(var(--chart-3))", 
+        "hsl(var(--chart-4))", 
+        "hsl(var(--chart-5))"
+      ];
       acc[entity.entity_id] = {
         label: entity.attributes.friendly_name || entity.entity_id,
-        color: `hsl(${chartColorCssVars[index % chartColorCssVars.length]})`, // Ensure color is a full HSL string
+        color: chartColorStrings[index % chartColorStrings.length],
       };
       return acc;
     }, {} as AppChartConfig);
@@ -291,3 +297,4 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+
