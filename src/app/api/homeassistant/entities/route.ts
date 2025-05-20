@@ -5,8 +5,13 @@ import type { Entity } from '@/types/home-assistant';
 
 export async function POST(request: NextRequest) {
   try {
-    const homeAssistantUrl = "https://n74elq0ugf4ac6p1c62jzifjzl9x0m5z.ui.nabu.casa";
-    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOGU5MjI3N2NmZWY0MTdhOTYwNTBiODllMTViYWNiNiIsImlhdCI6MTc0NzY1NTcxNSwiZXhwIjoyMDYzMDE1NzE1fQ.MedyEC-u6lDJsL98Es-WHdnxSsIk3V4VwY4lJEAQXUw";
+    const homeAssistantUrl = process.env.HOME_ASSISTANT_URL;
+    const token = process.env.HOME_ASSISTANT_TOKEN;
+
+    if (!homeAssistantUrl || !token) {
+      console.error('Missing HOME_ASSISTANT_URL or HOME_ASSISTANT_TOKEN in environment variables');
+      return NextResponse.json({ error: 'Server configuration error: Missing Home Assistant credentials.' }, { status: 500 });
+    }
 
     const normalizedUrl = homeAssistantUrl.replace(/\/$/, ""); // Remove trailing slash if present
 

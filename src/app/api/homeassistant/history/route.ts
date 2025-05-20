@@ -7,10 +7,15 @@ export async function POST(request: NextRequest) {
   let entityIdForLogging: string | undefined;
   try {
     const { entityId, startDateISO, endDateISO } = await request.json();
-    const homeAssistantUrl = "https://n74elq0ugf4ac6p1c62jzifjzl9x0m5z.ui.nabu.casa";
-    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIyOGU5MjI3N2NmZWY0MTdhOTYwNTBiODllMTViYWNiNiIsImlhdCI6MTc0NzY1NTcxNSwiZXhwIjoyMDYzMDE1NzE1fQ.MedyEC-u6lDJsL98Es-WHdnxSsIk3V4VwY4lJEAQXUw";
-
     entityIdForLogging = entityId;
+
+    const homeAssistantUrl = process.env.HOME_ASSISTANT_URL;
+    const token = process.env.HOME_ASSISTANT_TOKEN;
+
+    if (!homeAssistantUrl || !token) {
+        console.error('Missing HOME_ASSISTANT_URL or HOME_ASSISTANT_TOKEN in environment variables for history endpoint');
+        return NextResponse.json({ error: 'Server configuration error: Missing Home Assistant credentials.' }, { status: 500 });
+    }
 
     if (!entityId || !startDateISO || !endDateISO) {
       return NextResponse.json({ error: 'Missing entityId, Start Date, or End Date' }, { status: 400 });
