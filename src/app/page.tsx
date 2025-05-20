@@ -3,11 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { NextPage } from 'next';
-import { HomeIcon, LogOut } from 'lucide-react';
+import { HomeIcon } from 'lucide-react';
 import { subHours, format } from 'date-fns';
 
-import ConnectionForm from '@/components/homeview/ConnectionForm';
-import type { ConnectionFormValues } from '@/components/homeview/ConnectionForm';
 import EntityList from '@/components/homeview/EntityList';
 import DynamicChart from '@/components/homeview/DynamicChart';
 import DataTable from '@/components/homeview/DataTable';
@@ -17,13 +15,10 @@ import { useToast } from '@/hooks/use-toast';
 import type { Entity, FormattedChartDataPoint, EntityHistoryPoint, ChartConfig as AppChartConfig } from '@/types/home-assistant';
 
 const HomeViewPage: NextPage = () => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [homeAssistantUrl, setHomeAssistantUrl] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
-  const [loading, setLoading] = useState({ connect: false, entities: false, chart: false });
+  const [loading, setLoading] = useState({ entities: true, chart: false }); // entities true initially
   
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -36,50 +31,39 @@ const HomeViewPage: NextPage = () => {
     setEndDate(new Date());
   }, []);
 
-  const handleConnect = async (values: ConnectionFormValues) => {
-    setLoading(prev => ({ ...prev, connect: true, entities: true }));
+  const fetchEntities = async () => {
+    setLoading(prev => ({ ...prev, entities: true }));
     try {
       const response = await fetch('/api/homeassistant/entities', {
-        method: 'POST',
+        method: 'POST', // Still POST as per current API route, but body can be empty or minimal
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          homeAssistantUrl: values.homeAssistantUrl,
-          token: values.token,
-        }),
+        body: JSON.stringify({}), // Backend will use env vars
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to connect: ${response.statusText}`);
+        throw new Error(errorData.error || `Failed to fetch entities: ${response.statusText}`);
       }
 
       const fetchedEntities: Entity[] = await response.json();
-      
-      setHomeAssistantUrl(values.homeAssistantUrl);
-      setToken(values.token);
       setEntities(fetchedEntities);
-      setIsConnected(true);
-      toast({ title: "Successfully Connected", description: "Fetched entities from Home Assistant." });
+      if (fetchedEntities.length > 0) {
+        toast({ title: "Entities Loaded", description: "Fetched entities from Home Assistant." });
+      } else {
+        toast({ variant: "default", title: "No Entities Found", description: "Connected, but no entities were returned." });
+      }
     } catch (error) {
-      console.error("Connection failed:", error);
-      toast({ variant: "destructive", title: "Connection Failed", description: (error as Error).message });
+      console.error("Fetching entities failed:", error);
+      toast({ variant: "destructive", title: "Entity Fetch Failed", description: (error as Error).message });
     } finally {
-      setLoading(prev => ({ ...prev, connect: false, entities: false }));
+      setLoading(prev => ({ ...prev, entities: false }));
     }
   };
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setHomeAssistantUrl(null);
-    setToken(null);
-    setEntities([]);
-    setSelectedEntityIds([]);
-    setChartData([]);
-    // Reset dates to initial client-side defaults
-    setStartDate(subHours(new Date(), 24));
-    setEndDate(new Date());
-    toast({ title: "Disconnected", description: "You have been disconnected from Home Assistant." });
-  };
+  useEffect(() => {
+    fetchEntities();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Fetch entities on initial load
 
   const handleEntitySelectionChange = (entityId: string, selected: boolean) => {
     setSelectedEntityIds(prev =>
@@ -102,7 +86,7 @@ const HomeViewPage: NextPage = () => {
     const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
     
     const formattedPoints = sortedTimestamps.map(timestamp => {
-      if (isNaN(timestamp)) { // Should not happen due to previous check, but as a safeguard
+      if (isNaN(timestamp)) {
         console.warn("Invalid timestamp encountered in formatChartData:", timestamp);
         return null; 
       }
@@ -117,10 +101,8 @@ const HomeViewPage: NextPage = () => {
           
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
-            const stateString = String(point.s);
-            // Try to parse float, handling commas as decimal separators and removing non-numeric characters
-            // parseFloat is generally good at extracting numbers from strings like "10.5 C"
-            numericValue = parseFloat(stateString.replace(',', '.'));
+            const stateString = String(point.s).replace(',', '.');
+            numericValue = parseFloat(stateString);
           }
           dataPoint[id] = numericValue;
         } else {
@@ -130,13 +112,13 @@ const HomeViewPage: NextPage = () => {
       return dataPoint;
     }).filter(dp => dp !== null && 
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
-    ) as FormattedChartDataPoint[]; // Cast to ensure type after filter(null)
+    ) as FormattedChartDataPoint[]; 
 
     return formattedPoints;
   };
 
   const fetchChartData = useCallback(async () => {
-    if (selectedEntityIds.length === 0 || !homeAssistantUrl || !token || !startDate || !endDate) {
+    if (selectedEntityIds.length === 0 || !startDate || !endDate) {
       setChartData([]);
       return;
     }
@@ -153,10 +135,9 @@ const HomeViewPage: NextPage = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entityId: id,
-            homeAssistantUrl,
-            token: token,
             startDateISO: startDate.toISOString(),
             endDateISO: endDate.toISOString(),
+            // URL and token are no longer sent from client
           }),
         });
         if (!response.ok) {
@@ -190,7 +171,7 @@ const HomeViewPage: NextPage = () => {
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
-  }, [selectedEntityIds, homeAssistantUrl, token, startDate, endDate, toast]);
+  }, [selectedEntityIds, startDate, endDate, toast]);
 
   useEffect(() => {
     if (startDate && endDate && selectedEntityIds.length > 0) {
@@ -201,7 +182,7 @@ const HomeViewPage: NextPage = () => {
   }, [fetchChartData, startDate, endDate, selectedEntityIds]); 
 
   useEffect(() => {
-    if (!isConnected || selectedEntityIds.length === 0 || loading.chart || !startDate || !endDate) return;
+    if (selectedEntityIds.length === 0 || loading.chart || !startDate || !endDate) return;
 
     const interval = setInterval(() => {
       if (startDate && endDate) {
@@ -210,7 +191,7 @@ const HomeViewPage: NextPage = () => {
     }, 60000); 
 
     return () => clearInterval(interval);
-  }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
+  }, [selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
   
   const namedChartColors = [
     "red", "green", "blue", "purple", "orange", 
@@ -223,7 +204,7 @@ const HomeViewPage: NextPage = () => {
     .reduce((acc, entity, index) => {
       acc[entity.entity_id] = {
         label: entity.attributes.friendly_name || entity.entity_id,
-        color: namedChartColors[index % namedChartColors.length], // Cycle through named colors
+        color: namedChartColors[index % namedChartColors.length],
       };
       return acc;
     }, {} as AppChartConfig);
@@ -237,19 +218,19 @@ const HomeViewPage: NextPage = () => {
             <HomeIcon className="h-7 w-7 text-primary" />
             <h1 className="text-2xl font-bold text-foreground">HomeView</h1>
           </div>
-          {isConnected && (
-            <Button variant="ghost" size="icon" onClick={handleDisconnect} aria-label="Disconnect">
-              <LogOut className="h-5 w-5" />
-            </Button>
-          )}
+          {/* Disconnect button removed */}
         </div>
       </header>
 
       <main className="flex-grow container mx-auto p-4 md:p-6">
-        {!isConnected ? (
-          <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
-            <ConnectionForm onConnect={handleConnect} loading={loading.connect} />
-          </div>
+        {loading.entities && entities.length === 0 ? (
+            <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+                <p className="text-lg text-muted-foreground">Loading entities...</p>
+            </div>
+        ) : !loading.entities && entities.length === 0 ? (
+             <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+                <p className="text-lg text-red-500">Failed to load entities. Please check server configuration.</p>
+            </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-7 gap-6">
             <div className="lg:col-span-3"> 
@@ -302,5 +283,6 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+    
 
     

@@ -6,11 +6,20 @@ import type { EntityHistoryPoint } from '@/types/home-assistant';
 export async function POST(request: NextRequest) {
   let entityIdForLogging: string | undefined;
   try {
-    const { entityId, homeAssistantUrl, token, startDateISO, endDateISO } = await request.json();
+    const { entityId, startDateISO, endDateISO } = await request.json();
+    // homeAssistantUrl and token are no longer from request body
+    const homeAssistantUrl = process.env.HOME_ASSISTANT_URL;
+    const token = process.env.HOME_ASSISTANT_TOKEN;
+
     entityIdForLogging = entityId;
 
-    if (!entityId || !homeAssistantUrl || !token || !startDateISO || !endDateISO) {
-      return NextResponse.json({ error: 'Missing entityId, Home Assistant URL, Token, Start Date, or End Date' }, { status: 400 });
+    if (!homeAssistantUrl || !token) {
+      console.error('Missing HOME_ASSISTANT_URL or HOME_ASSISTANT_TOKEN environment variables');
+      return NextResponse.json({ error: 'Server configuration error: Missing Home Assistant URL or Token environment variables.' }, { status: 500 });
+    }
+
+    if (!entityId || !startDateISO || !endDateISO) {
+      return NextResponse.json({ error: 'Missing entityId, Start Date, or End Date' }, { status: 400 });
     }
 
     const normalizedUrl = homeAssistantUrl.replace(/\/$/, ""); // Remove trailing slash
@@ -47,10 +56,8 @@ export async function POST(request: NextRequest) {
     let rawPointsList: any[] = [];
 
     if (Array.isArray(haResponseData) && haResponseData.length > 0 && Array.isArray(haResponseData[0])) {
-      // Standard HA response: [[{point1}, {point2}]]
       rawPointsList = haResponseData[0] || [];
     } else if (Array.isArray(haResponseData)) {
-      // Alternative HA response for single entity (or if minimal_response behaves differently): [{point1}, {point2}]
       rawPointsList = haResponseData;
     } else {
       console.warn(`Unexpected history format from Home Assistant for ${entityId}:`, haResponseData);
@@ -60,22 +67,20 @@ export async function POST(request: NextRequest) {
       let timestampInSeconds: number | undefined = undefined;
       const stateValue = p.s !== undefined ? String(p.s) : (p.state !== undefined ? String(p.state) : undefined);
 
-      if (typeof p.lu === 'number') { // Unix timestamp (seconds) from minimal_response
+      if (typeof p.lu === 'number') { 
         timestampInSeconds = p.lu;
-      } else if (typeof p.last_updated === 'string') { // ISO string
+      } else if (typeof p.last_updated === 'string') { 
         timestampInSeconds = new Date(p.last_updated).getTime() / 1000;
-      } else if (typeof p.last_changed === 'string') { // ISO string (fallback)
+      } else if (typeof p.last_changed === 'string') { 
         timestampInSeconds = new Date(p.last_changed).getTime() / 1000;
       }
 
       if (stateValue === undefined || timestampInSeconds === undefined || isNaN(timestampInSeconds)) {
-        // console.warn(`Skipping invalid history point for ${entityId}:`, p);
         return null; 
       }
       return { s: stateValue, lu: timestampInSeconds };
     }).filter(p => p !== null) as EntityHistoryPoint[];
     
-    // Sort by timestamp just in case HA doesn't guarantee order (it usually does)
     processedHistory.sort((a, b) => a.lu - b.lu);
 
     return NextResponse.json(processedHistory);
@@ -85,3 +90,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error fetching entity history', details: message }, { status: 500 });
   }
 }
+
+    

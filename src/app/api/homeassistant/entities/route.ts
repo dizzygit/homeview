@@ -5,10 +5,13 @@ import type { Entity } from '@/types/home-assistant';
 
 export async function POST(request: NextRequest) {
   try {
-    const { homeAssistantUrl, token } = await request.json();
+    // const { homeAssistantUrl, token } = await request.json(); // No longer from request body
+    const homeAssistantUrl = process.env.HOME_ASSISTANT_URL;
+    const token = process.env.HOME_ASSISTANT_TOKEN;
 
     if (!homeAssistantUrl || !token) {
-      return NextResponse.json({ error: 'Missing Home Assistant URL or Token' }, { status: 400 });
+      console.error('Missing HOME_ASSISTANT_URL or HOME_ASSISTANT_TOKEN environment variables');
+      return NextResponse.json({ error: 'Server configuration error: Missing Home Assistant URL or Token environment variables.' }, { status: 500 });
     }
 
     const normalizedUrl = homeAssistantUrl.replace(/\/$/, ""); // Remove trailing slash if present
@@ -19,13 +22,12 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      cache: 'no-store', // Ensure fresh data
+      cache: 'no-store', 
     });
 
     if (!response.ok) {
       let errorData = 'An unknown error occurred';
       try {
-        // Try to parse error from HA, it might be plain text or JSON
         const textError = await response.text();
         try {
             const jsonError = JSON.parse(textError);
@@ -48,3 +50,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error fetching entities', details: message }, { status: 500 });
   }
 }
+
+    
