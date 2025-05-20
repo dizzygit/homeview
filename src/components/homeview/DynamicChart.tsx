@@ -10,6 +10,7 @@ import {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
+  type ChartConfig as ShadcnChartConfig, // Import the full type for clarity
 } from "@/components/ui/chart";
 import { LineChart, CartesianGrid, XAxis, YAxis, Line } from "recharts";
 import { LineChartIcon, Info } from 'lucide-react';
@@ -17,7 +18,7 @@ import { LineChartIcon, Info } from 'lucide-react';
 interface DynamicChartProps {
   data: FormattedChartDataPoint[];
   selectedEntities: Entity[];
-  chartConfig: AppChartConfig; 
+  chartConfig: AppChartConfig; // This is our AppChartConfig { entity_id: { label, color: "hsl(var(--chart-N))" } }
   loading: boolean;
 }
 
@@ -80,6 +81,9 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
     );
   }
 
+  // Our AppChartConfig is directly compatible with ShadcnChartConfig's { color: string } variant
+  // as long as the 'color' field contains a valid CSS color string (e.g., "hsl(var(--chart-1))")
+  // and 'label' is a string.
 
   return (
     <Card className="flex-grow shadow-lg">
@@ -93,7 +97,8 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
         </CardDescription>
       </CardHeader>
       <CardContent className="h-[calc(100vh-20rem)] md:h-[calc(100vh-22rem)]">
-        <ChartContainer config={chartConfig as any} className="w-full h-full">
+        {/* Pass the chartConfig (our AppChartConfig) directly. It's compatible. */}
+        <ChartContainer config={chartConfig as ShadcnChartConfig} className="w-full h-full">
           <LineChart
             accessibilityLayer
             data={data}
@@ -117,19 +122,26 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
               content={<ChartTooltipContent indicator="line" />}
             />
             <ChartLegend content={<ChartLegendContent />} />
-            {selectedEntities.map((entity) => (
-              <Line
-                key={entity.entity_id}
-                dataKey={entity.entity_id}
-                type="monotone"
-                stroke={`var(--color-${entity.entity_id})`} 
-                strokeWidth={2}
-                dot={false}
-                name={chartConfig[entity.entity_id]?.label || entity.entity_id}
-                animationDuration={300} 
-                connectNulls={true} 
-              />
-            ))}
+            {selectedEntities.map((entity) => {
+              const entityConf = chartConfig[entity.entity_id];
+              // Fallback label if not in config (should not happen if logic in page.tsx is correct)
+              const displayName = entityConf?.label || entity.entity_id;
+              
+              return (
+                <Line
+                  key={entity.entity_id}
+                  dataKey={entity.entity_id}
+                  type="monotone"
+                  // This relies on ChartContainer creating --color-entity.entity_id
+                  stroke={`var(--color-${entity.entity_id})`} 
+                  strokeWidth={2}
+                  dot={false} // Keep dots off for clean lines
+                  name={displayName} // Name for the legend
+                  animationDuration={300} 
+                  connectNulls={true} 
+                />
+              );
+            })}
           </LineChart>
         </ChartContainer>
       </CardContent>
@@ -139,3 +151,4 @@ const DynamicChart: FC<DynamicChartProps> = ({ data, selectedEntities, chartConf
 
 export default DynamicChart;
 
+    
