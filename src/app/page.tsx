@@ -18,7 +18,7 @@ const HomeViewPage: NextPage = () => {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [selectedEntityIds, setSelectedEntityIds] = useState<string[]>([]);
   const [chartData, setChartData] = useState<FormattedChartDataPoint[]>([]);
-  const [loading, setLoading] = useState({ entities: true, chart: false }); // entities true initially
+  const [loading, setLoading] = useState({ entities: true, chart: false });
   
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
@@ -35,9 +35,9 @@ const HomeViewPage: NextPage = () => {
     setLoading(prev => ({ ...prev, entities: true }));
     try {
       const response = await fetch('/api/homeassistant/entities', {
-        method: 'POST', // Still POST as per current API route, but body can be empty or minimal
+        method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}), // Backend will use env vars
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -63,7 +63,30 @@ const HomeViewPage: NextPage = () => {
   useEffect(() => {
     fetchEntities();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch entities on initial load
+  }, []);
+
+  // Effect to set default selected entities
+  useEffect(() => {
+    if (entities.length > 0 && selectedEntityIds.length === 0) { // Only set defaults if no entities are selected yet
+      const defaultFriendlyNames = [
+        "Pingvin Temperatura na zewnątrz",
+        "Esp32Termodht11 Salon temp"
+      ];
+      const idsToSelect: string[] = [];
+      
+      defaultFriendlyNames.forEach(friendlyName => {
+        const entityToSelect = entities.find(e => e.attributes.friendly_name === friendlyName);
+        if (entityToSelect) {
+          idsToSelect.push(entityToSelect.entity_id);
+        }
+      });
+
+      if (idsToSelect.length > 0) {
+        setSelectedEntityIds(idsToSelect);
+      }
+    }
+  }, [entities, selectedEntityIds]);
+
 
   const handleEntitySelectionChange = (entityId: string, selected: boolean) => {
     setSelectedEntityIds(prev =>
@@ -102,7 +125,7 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s).replace(',', '.');
-            numericValue = parseFloat(stateString);
+            numericValue = parseFloat(stateString); // Use parseFloat for better parsing of "value unit" strings
           }
           dataPoint[id] = numericValue;
         } else {
@@ -137,7 +160,6 @@ const HomeViewPage: NextPage = () => {
             entityId: id,
             startDateISO: startDate.toISOString(),
             endDateISO: endDate.toISOString(),
-            // URL and token are no longer sent from client
           }),
         });
         if (!response.ok) {
@@ -218,7 +240,6 @@ const HomeViewPage: NextPage = () => {
             <HomeIcon className="h-7 w-7 text-primary" />
             <h1 className="text-2xl font-bold text-foreground">HomeView</h1>
           </div>
-          {/* Disconnect button removed */}
         </div>
       </header>
 
@@ -283,6 +304,8 @@ const HomeViewPage: NextPage = () => {
 };
 
 export default HomeViewPage;
+    
+
     
 
     
