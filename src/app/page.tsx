@@ -102,6 +102,10 @@ const HomeViewPage: NextPage = () => {
     const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
     
     const formattedPoints = sortedTimestamps.map(timestamp => {
+      if (isNaN(timestamp)) { // Should not happen due to previous check, but as a safeguard
+        console.warn("Invalid timestamp encountered in formatChartData:", timestamp);
+        return null; 
+      }
       const dataPoint: FormattedChartDataPoint = {
         time: format(new Date(timestamp), "HH:mm:ss"), 
         fullTime: format(new Date(timestamp), "yyyy-MM-dd HH:mm:ss"), 
@@ -114,6 +118,8 @@ const HomeViewPage: NextPage = () => {
           let numericValue = NaN;
           if (point && point.s !== null && point.s !== undefined) {
             const stateString = String(point.s);
+            // Try to parse float, handling commas as decimal separators and removing non-numeric characters
+            // parseFloat is generally good at extracting numbers from strings like "10.5 C"
             numericValue = parseFloat(stateString.replace(',', '.'));
           }
           dataPoint[id] = numericValue;
@@ -122,11 +128,11 @@ const HomeViewPage: NextPage = () => {
         }
       });
       return dataPoint;
-    });
-
-    return formattedPoints.filter(dp => 
+    }).filter(dp => dp !== null && 
         selectedEntityIds.some(id => dp[id] !== undefined && !isNaN(dp[id] as number))
-    );
+    ) as FormattedChartDataPoint[]; // Cast to ensure type after filter(null)
+
+    return formattedPoints;
   };
 
   const fetchChartData = useCallback(async () => {
@@ -206,19 +212,18 @@ const HomeViewPage: NextPage = () => {
     return () => clearInterval(interval);
   }, [isConnected, selectedEntityIds, loading.chart, fetchChartData, startDate, endDate]);
   
+  const namedChartColors = [
+    "red", "green", "blue", "purple", "orange", 
+    "teal", "magenta", "brown", "lime", "cyan",
+    "navy", "olive", "maroon", "indigo", "gold" 
+  ];
+
   const appChartConfig: AppChartConfig = entities
     .filter(e => selectedEntityIds.includes(e.entity_id))
     .reduce((acc, entity, index) => {
-      const chartColorStrings = [
-        "hsl(var(--chart-1))", 
-        "hsl(var(--chart-2))", 
-        "hsl(var(--chart-3))", 
-        "hsl(var(--chart-4))", 
-        "hsl(var(--chart-5))"
-      ];
       acc[entity.entity_id] = {
         label: entity.attributes.friendly_name || entity.entity_id,
-        color: chartColorStrings[index % chartColorStrings.length],
+        color: namedChartColors[index % namedChartColors.length], // Cycle through named colors
       };
       return acc;
     }, {} as AppChartConfig);
@@ -298,3 +303,4 @@ const HomeViewPage: NextPage = () => {
 
 export default HomeViewPage;
 
+    
